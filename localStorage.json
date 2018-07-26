@@ -1,0 +1,1 @@
+{"test.public.tables.testers.definition":"{\"name\":{\"name\":\"name\",\"index\":0,\"type\":\"string\",\"length\":50},\"machine\":{\"name\":\"machine\",\"index\":1,\"type\":\"string\",\"length\":50}}","test.public.tables.testers.rows":"[[\"Unknown Test\",\"tester1\"]]"}
