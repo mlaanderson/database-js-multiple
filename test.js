@@ -1,18 +1,16 @@
-const MultipleDriver = require('.');
-const { Connection } = require('database-js');
+const MultipleDatabase = require(".");
 
-(async () => {
-    let mdb = new MultipleDriver();
-    mdb.addView("states", "sqlite:///test.sqlite", "SELECT * FROM states");
-    mdb.addView("abbr", "localstorage:///tests", "SELECT * FROM abbr");
+(async function() {
+    var multdb = new MultipleDatabase();
+    multdb.add("states", "sqlite:///test.sqlite", "SELECT * FROM states");
+    multdb.add("abbr", "localstorage:///tests", "SELECT * FROM abbr");
 
-    let conn = new Connection({}, mdb);
+    var conn = multdb.connection;
+    var statement = conn.prepareStatement("SELECT abbr.Abbr, states.Ranking, states.Population FROM states JOIN abbr ON states.State = abbr.State");
 
-    let stmt = conn.prepareStatement("SELECT abbr.Abbr, states.Ranking, states.Population FROM states JOIN abbr ON states.State = abbr.State");
-    let rows = await stmt.query();
+    let rows = await statement.query();
 
     console.log(rows);
 
     await conn.close();
-
 })();

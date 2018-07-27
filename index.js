@@ -1,37 +1,97 @@
-const { Connection } = require('database-js');
+const { Connection, PreparedStatement } = require('database-js');
 const AbstractDriver = require('database-js-sqlparser');
+
+var privates = new WeakMap();
+
+class View {
+    constructor(name, url, sql, ...parameters) {
+        let conn;
+        if (Connection.prototype.isPrototypeOf(url)) {
+            conn = url;
+        } else {
+            conn = new Connection(url);
+        }
+
+        privates.set(this, {
+            name: name,
+            sql: sql,
+            statement: conn.prepareStatement(sql),
+            connection: conn
+        });
+
+        this.parameters = parameters;
+    }
+
+    /** @type {string} */
+    get name() {
+        return privates.get(this).name;
+    }
+
+    /**
+     * @type {Connection}
+     */
+    get connection() {
+        return privates.get(this).connection;
+    }
+
+    /** @type {string} */
+    get sql() {
+        return privates.get(this).sql;
+    }
+    set sql(sql) {
+        privates.get(this).sql = sql;
+        privates.get(this).statement = this.connection.prepareStatement(sql);
+    }
+
+    /** @type {PreparedStatement} */
+    get statement() {
+        return privates.get(this).statement
+    }
+
+    /**
+     * Sets new parameters for the view
+     * @param {Array<any>} parameters Parameters used to filter the view
+     */
+    setParameters(...parameters) {
+        this.parameters = parameters;
+    }
+}
 
 class MultipleDriver extends AbstractDriver {
     constructor() {
         super();
-        this.__views = {};
+        privates.set(this, {
+            views: {}, 
+            connection: new Connection({}, this)
+        });
     }
 
     /**
      * Adds a view definition
      * @param {string} name The view name or alias
      * @param {string|Connection} url The database connection or connection URL
-     * @param {string} definition The view definition
+     * @param {string} sql The SQL to generate the view
      */
-    addView(name, url, definition, ...parameters) {
-        if (this.__views[name]) {
+    add(name, url, sql, ...parameters) {
+        if (privates.get(this).views[name]) {
             throw `${name} is already defined as a view`;
         }
 
-        let conn;
+        privates.get(this).views[name] = new View(name, url, sql, ...parameters);
+    }
 
-        if (Connection.prototype.isPrototypeOf(url)) {
-            conn = url;
-        } else {
-            conn = new Connection(url.toString());
-        }
+    /**
+     * Fetches a view by name or aliase
+     * @param {string} name The view name or alias
+     * @returns {View}
+     */
+    view(name) {
+        if (!privates.get(this).views[name]) return null;
+        return privates.get(this).views[name];
+    }
 
-        this.__views[name] = {
-            name: name,
-            connection: conn,
-            definition: conn.prepareStatement(definition),
-            parameters: parameters
-        };
+    get connection() {
+        return privates.get(this).connection;
     }
 
     /**
@@ -48,10 +108,10 @@ class MultipleDriver extends AbstractDriver {
      */
     load(table) {
         return new Promise((resolve, reject) => {
-            if (!this.__views[table]) {
+            if (!privates.get(this).views[table]) {
                 return reject(`The view "${table}" does not exist`);
             }
-            resolve(this.__views[table].definition.query(...this.__views[table].parameters));
+            resolve(privates.get(this).views[table].statement.query(...privates.get(this).views[table].parameters));
         });
     }
 
@@ -70,7 +130,7 @@ class MultipleDriver extends AbstractDriver {
     close() {
         return new Promise((resolve, reject) => {
             let promises = [];
-            for (let view of Object.values(this.__views)) {
+            for (let view of Object.values(privates.get(this).views)) {
                 promises.push(view.connection.close());
             }
 
